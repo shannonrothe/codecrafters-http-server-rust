@@ -53,6 +53,7 @@ impl<'a> Request<'a> {
             .map(|l| l.as_bytes())
             .flatten()
             .copied()
+            .filter(|&b| b != 0)
             .collect::<Vec<_>>();
 
         Ok(Self {
@@ -190,14 +191,7 @@ fn main() -> anyhow::Result<()> {
                         let file_path =
                             PathBuf::from(dir.context("missing directory")?).join(&filename);
                         let mut file = std::fs::File::create(file_path)?;
-                        file.write_all(
-                            &request
-                                .body
-                                .iter()
-                                .cloned()
-                                .filter(|&b| b != 0)
-                                .collect::<Vec<_>>(),
-                        )?;
+                        file.write_all(&request.body)?;
                         resp.created(stream)?;
                     }
                     m => {
