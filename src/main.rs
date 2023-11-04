@@ -48,17 +48,15 @@ impl<'a> Request<'a> {
             }
         }
 
-        // Read remaining bytes as body into a &[u8]
-        let body = lines_iter
-            .map(|l| l.as_bytes())
-            .flatten()
-            .copied()
-            .collect::<Vec<_>>();
+        let body = lines_iter.copied().collect::<Vec<_>>().join("\r\n");
+        let content_length = headers["Content-Length"].parse::<usize>()?;
+        let body = body.as_bytes().to_vec();
+        let body = &body[..content_length];
 
         Ok(Self {
             path,
             headers,
-            body,
+            body: body.to_vec(),
         })
     }
 
