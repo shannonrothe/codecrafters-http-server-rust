@@ -19,7 +19,7 @@ fn main() -> anyhow::Result<()> {
         let mut parts = first_line.split_whitespace();
         match parts.nth(1) {
             Some(path) => {
-                let (_, rest) = path.split_at(1);
+                let (s, rest) = path.split_at(1);
                 let (maybe_echo, rest) = rest.split_once("/").context("invalid path")?;
                 match maybe_echo {
                     "echo" => {
@@ -33,6 +33,11 @@ fn main() -> anyhow::Result<()> {
                         stream
                             .write_all(resp.as_bytes())
                             .context("failed to write content")?;
+                    }
+                    _ if s == "/" => {
+                        stream
+                            .write_all(b"HTTP/1.1 200 OK\r\n\r\n")
+                            .context("failed to write 200")?;
                     }
                     _ => {
                         stream
