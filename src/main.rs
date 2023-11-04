@@ -29,7 +29,7 @@ impl<'a> From<&'a str> for Path<'a> {
 struct Request<'a> {
     path: Path<'a>,
     headers: HashMap<&'a str, &'a str>,
-    body: &'a [u8],
+    body: Vec<u8>,
 }
 
 impl<'a> Request<'a> {
@@ -48,7 +48,12 @@ impl<'a> Request<'a> {
             }
         }
 
-        let body = lines_iter.next().map(|l| l.as_bytes()).unwrap_or_default();
+        // Read remaining bytes as body into a &[u8]
+        let body = lines_iter
+            .map(|l| l.as_bytes())
+            .flatten()
+            .copied()
+            .collect::<Vec<_>>();
 
         Ok(Self {
             path,
