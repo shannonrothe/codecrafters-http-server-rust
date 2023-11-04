@@ -50,6 +50,41 @@ impl<'a> Request<'a> {
     }
 }
 
+struct Response;
+
+impl Response {
+    fn new() -> Self {
+        Self
+    }
+
+    pub fn success<S>(&self, mut stream: S, text: &str) -> anyhow::Result<()>
+    where
+        S: Write,
+    {
+        let header = vec![
+            "HTTP/1.1 200 OK",
+            "Content-Type: text/plain",
+            "Content-Length: ",
+        ]
+        .join("\r\n");
+        let resp = format!("{}{}\r\n\r\n{}", header, text.len(), text);
+        stream
+            .write_all(resp.as_bytes())
+            .context("failed to write content")?;
+        Ok(())
+    }
+
+    pub fn not_found<S>(&self, mut stream: S) -> anyhow::Result<()>
+    where
+        S: Write,
+    {
+        stream
+            .write_all(b"HTTP/1.1 404 Not Found\r\n\r\n")
+            .context("failed to write content")?;
+        Ok(())
+    }
+}
+
 fn main() -> anyhow::Result<()> {
     let listener = TcpListener::bind("127.0.0.1:4221").unwrap();
 
@@ -62,6 +97,7 @@ fn main() -> anyhow::Result<()> {
         let s = String::from_utf8_lossy(&buf);
         let lines = s.split("\r\n").collect::<Vec<_>>();
         let request = Request::parse(lines)?;
+        let resp = Response::new();
 
         match request.path() {
             "/" => {
@@ -71,34 +107,14 @@ fn main() -> anyhow::Result<()> {
                 continue;
             }
             "/user-agent" => {
-                let header = vec![
-                    "HTTP/1.1 200 OK",
-                    "Content-Type: text/plain",
-                    "Content-Length: ",
-                ]
-                .join("\r\n");
-                let resp = format!("{}{}\r\n\r\n{}", header, request.headers["User-Agent"], "");
-                stream
-                    .write_all(resp.as_bytes())
-                    .context("failed to write content")?;
+                resp.success(stream, request.headers["User-Agent"])?;
             }
             p if p.starts_with("/echo") => {
-                let (_, str) = p.take_split(5);
-                let header = vec![
-                    "HTTP/1.1 200 OK",
-                    "Content-Type: text/plain",
-                    "Content-Length: ",
-                ]
-                .join("\r\n");
-                let resp = format!("{}{}\r\n\r\n{}", header, str.len(), str);
-                stream
-                    .write_all(resp.as_bytes())
-                    .context("failed to write content")?;
+                let (str, _) = p.take_split(5);
+                resp.success(stream, str)?;
             }
             _ => {
-                stream
-                    .write_all(b"HTTP/1.1 404 Not Found\r\n\r\n")
-                    .context("failed to write 404")?;
+                resp.not_found(stream)?;
             }
         }
     }
