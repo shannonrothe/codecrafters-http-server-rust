@@ -12,15 +12,16 @@ use std::{
 
 #[derive(Debug)]
 struct Path<'a> {
+    method: &'a str,
     path: &'a str,
 }
 
 impl<'a> From<&'a str> for Path<'a> {
     fn from(s: &'a str) -> Self {
         let mut parts = s.split_whitespace();
-        let _ = parts.next().unwrap();
+        let method = parts.next().unwrap();
         let path = parts.next().unwrap();
-        Self { path }
+        Self { method, path }
     }
 }
 
@@ -50,6 +51,10 @@ impl<'a> Request<'a> {
 
     pub fn path(&self) -> &str {
         self.path.path
+    }
+
+    pub fn method(&self) -> &str {
+        self.path.method
     }
 }
 
@@ -84,6 +89,16 @@ impl Response {
         stream
             .write_all(resp.as_bytes())
             .context("failed to write text")?;
+        Ok(())
+    }
+
+    pub fn created<S>(&self, mut stream: S) -> anyhow::Result<()>
+    where
+        S: Write,
+    {
+        stream
+            .write_all(b"HTTP/1.1 201 Created\r\n\r\n")
+            .context("failed to write success")?;
         Ok(())
     }
 
@@ -143,19 +158,39 @@ fn main() -> anyhow::Result<()> {
                 "/user-agent" => {
                     resp.text(stream, request.headers["User-Agent"])?;
                 }
-                p if p.starts_with("/files/") && dir.is_some() => {
-                    let (filename, _) = p.take_split(7);
-                    let file_path =
-                        PathBuf::from(dir.context("missing directory")?).join(&filename);
-                    if file_path.exists() {
-                        let mut file = std::fs::File::open(file_path)?;
-                        let mut contents = Vec::new();
-                        file.read_to_end(&mut contents)?;
-                        resp.file(stream, &contents)?;
-                    } else {
-                        resp.not_found(stream)?;
+                p if p.starts_with("/files/") && dir.is_some() => match request.method() {
+                    "GET" => {
+                        let (filename, _) = p.take_split(7);
+                        let file_path =
+                            PathBuf::from(dir.context("missing directory")?).join(&filename);
+                        if file_path.exists() {
+                            let mut file = std::fs::File::open(file_path)?;
+                            let mut contents = Vec::new();
+                            file.read_to_end(&mut contents)?;
+                            resp.file(stream, &contents)?;
+                        } else {
+                            resp.not_found(stream)?;
+                        }
                     }
-                }
+                    "POST" => {
+                        let (filename, _) = p.take_split(7);
+                        let file_path =
+                            PathBuf::from(dir.context("missing directory")?).join(&filename);
+                        let mut file = std::fs::File::create(file_path)?;
+                        let mut buf = [0; 1024];
+                        loop {
+                            let n = stream.read(&mut buf)?;
+                            if n == 0 {
+                                break;
+                            }
+                            file.write_all(&buf[..n])?;
+                        }
+                        resp.created(stream)?;
+                    }
+                    m => {
+                        unimplemented!("unsupported method: {m}");
+                    }
+                },
                 p if p.starts_with("/echo/") => {
                     let (str, _) = p.take_split(6);
                     resp.text(stream, str)?;
