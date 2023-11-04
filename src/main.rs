@@ -38,7 +38,7 @@ impl<'a> Request<'a> {
         let lines_iter = &mut lines.iter();
         let path: Path = lines_iter
             .next()
-            .map(|f| Path::from(*f))
+            .map(|f| (*f).into())
             .context("failed to parse path")?;
 
         for header_line in lines_iter.take_while(|l| !l.is_empty()) {
@@ -93,16 +93,10 @@ impl Response {
     where
         S: Write,
     {
-        let header = vec![
-            "HTTP/1.1 200 OK",
-            "Content-Type: text/plain",
-            "Content-Length: ",
-        ]
-        .join("\r\n");
-        let resp = format!("{}{}\r\n\r\n{}", header, text.len(), text);
-        stream
-            .write_all(resp.as_bytes())
-            .context("failed to write text")?;
+        stream.write(b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ")?;
+        stream.write(format!("{}\r\n\r\n", text.len()).as_bytes())?;
+        stream.write(text.as_bytes())?;
+        stream.flush()?;
         Ok(())
     }
 
