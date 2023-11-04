@@ -19,7 +19,7 @@ fn main() -> anyhow::Result<()> {
         let mut parts = first_line.split_whitespace();
         match parts.nth(1) {
             Some(path) => {
-                if !path.starts_with("/echo") {
+                if path != "/" && !path.starts_with("/echo") {
                     stream
                         .write_all(b"HTTP/1.1 404 Not Found\r\n\r\n")
                         .context("failed to write 404")?;
