@@ -1,4 +1,3 @@
-// Uncomment this block to pass the first stage
 use anyhow::Context;
 use clap::Parser;
 use nom::InputTake;
@@ -48,7 +47,6 @@ impl<'a> Request<'a> {
             }
         }
 
-        // Read remaining bytes as body into a &[u8]
         let body = lines_iter
             .map(|l| l.as_bytes())
             .flatten()
