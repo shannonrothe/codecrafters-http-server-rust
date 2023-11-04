@@ -1,10 +1,12 @@
 // Uncomment this block to pass the first stage
 use anyhow::Context;
+use clap::Parser;
 use nom::InputTake;
 use std::{
     collections::HashMap,
     io::{Read, Write},
     net::TcpListener,
+    path::PathBuf,
     thread,
 };
 
@@ -58,30 +60,43 @@ impl Response {
         Self
     }
 
-    pub fn success<S>(&self, mut stream: S, text: Option<&str>) -> anyhow::Result<()>
+    pub fn success<S>(&self, mut stream: S) -> anyhow::Result<()>
     where
         S: Write,
     {
-        match text {
-            Some(text) => {
-                let header = vec![
-                    "HTTP/1.1 200 OK",
-                    "Content-Type: text/plain",
-                    "Content-Length: ",
-                ]
-                .join("\r\n");
-                let resp = format!("{}{}\r\n\r\n{}", header, text.len(), text);
-                stream
-                    .write_all(resp.as_bytes())
-                    .context("failed to write content")?;
-            }
-            None => {
-                stream
-                    .write_all(b"HTTP/1.1 200 OK\r\n\r\n")
-                    .context("failed to write content")?;
-            }
-        }
+        stream
+            .write_all(b"HTTP/1.1 200 OK\r\n\r\n")
+            .context("failed to write success")?;
+        Ok(())
+    }
 
+    pub fn text<S>(&self, mut stream: S, text: &str) -> anyhow::Result<()>
+    where
+        S: Write,
+    {
+        let header = vec![
+            "HTTP/1.1 200 OK",
+            "Content-Type: text/plain",
+            "Content-Length: ",
+        ]
+        .join("\r\n");
+        let resp = format!("{}{}\r\n\r\n{}", header, text.len(), text);
+        stream
+            .write_all(resp.as_bytes())
+            .context("failed to write text")?;
+        Ok(())
+    }
+
+    pub fn file<S>(&self, mut stream: S, file: &Vec<u8>) -> anyhow::Result<()>
+    where
+        S: Write,
+    {
+        stream.write(
+            b"HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: ",
+        )?;
+        stream.write(format!("{}\r\n\r\n", file.len()).as_bytes())?;
+        stream.write(file.as_slice())?;
+        stream.flush()?;
         Ok(())
     }
 
@@ -96,6 +111,14 @@ impl Response {
     }
 }
 
+#[derive(Debug, Clone, Parser)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    /// The directory to serve files from, as an absolute path.
+    #[clap(long)]
+    directory: Option<String>,
+}
+
 fn main() -> anyhow::Result<()> {
     let listener = TcpListener::bind("127.0.0.1:4221").unwrap();
 
@@ -105,6 +128,9 @@ fn main() -> anyhow::Result<()> {
             let mut buf = [0; 1024];
             stream.read(&mut buf)?;
 
+            let args = Args::parse();
+            let dir = args.directory;
+
             let s = String::from_utf8_lossy(&buf);
             let lines = s.split("\r\n").collect::<Vec<_>>();
             let request = Request::parse(lines)?;
@@ -112,14 +138,27 @@ fn main() -> anyhow::Result<()> {
 
             match request.path() {
                 "/" => {
-                    resp.success(stream, None)?;
+                    resp.success(stream)?;
                 }
                 "/user-agent" => {
-                    resp.success(stream, Some(request.headers["User-Agent"]))?;
+                    resp.text(stream, request.headers["User-Agent"])?;
+                }
+                p if p.starts_with("/files/") && dir.is_some() => {
+                    let (filename, _) = p.take_split(7);
+                    let file_path =
+                        PathBuf::from(dir.context("missing directory")?).join(&filename);
+                    if file_path.exists() {
+                        let mut file = std::fs::File::open(file_path)?;
+                        let mut contents = Vec::new();
+                        file.read(&mut contents)?;
+                        resp.file(stream, &contents)?;
+                    } else {
+                        resp.not_found(stream)?;
+                    }
                 }
                 p if p.starts_with("/echo/") => {
                     let (str, _) = p.take_split(6);
-                    resp.success(stream, Some(str))?;
+                    resp.text(stream, str)?;
                 }
                 _ => {
                     resp.not_found(stream)?;
