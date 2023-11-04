@@ -5,6 +5,7 @@ use std::{
     collections::HashMap,
     io::{Read, Write},
     net::TcpListener,
+    thread,
 };
 
 #[derive(Debug)]
@@ -100,30 +101,33 @@ fn main() -> anyhow::Result<()> {
 
     for stream in listener.incoming() {
         let mut stream = stream?;
+        thread::spawn(move || -> anyhow::Result<()> {
+            let mut buf = [0; 1024];
+            stream.read(&mut buf)?;
 
-        let mut buf = [0; 1024];
-        stream.read(&mut buf)?;
+            let s = String::from_utf8_lossy(&buf);
+            let lines = s.split("\r\n").collect::<Vec<_>>();
+            let request = Request::parse(lines)?;
+            let resp = Response::new();
 
-        let s = String::from_utf8_lossy(&buf);
-        let lines = s.split("\r\n").collect::<Vec<_>>();
-        let request = Request::parse(lines)?;
-        let resp = Response::new();
+            match request.path() {
+                "/" => {
+                    resp.success(stream, None)?;
+                }
+                "/user-agent" => {
+                    resp.success(stream, Some(request.headers["User-Agent"]))?;
+                }
+                p if p.starts_with("/echo/") => {
+                    let (str, _) = p.take_split(6);
+                    resp.success(stream, Some(str))?;
+                }
+                _ => {
+                    resp.not_found(stream)?;
+                }
+            }
 
-        match request.path() {
-            "/" => {
-                resp.success(stream, None)?;
-            }
-            "/user-agent" => {
-                resp.success(stream, Some(request.headers["User-Agent"]))?;
-            }
-            p if p.starts_with("/echo/") => {
-                let (str, _) = p.take_split(6);
-                resp.success(stream, Some(str))?;
-            }
-            _ => {
-                resp.not_found(stream)?;
-            }
-        }
+            Ok(())
+        });
     }
 
     Ok(())
