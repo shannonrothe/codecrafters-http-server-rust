@@ -29,24 +29,32 @@ impl<'a> From<&'a str> for Path<'a> {
 struct Request<'a> {
     path: Path<'a>,
     headers: HashMap<&'a str, &'a str>,
+    body: &'a [u8],
 }
 
 impl<'a> Request<'a> {
     pub fn parse(lines: Vec<&'a str>) -> anyhow::Result<Self> {
         let mut headers = HashMap::new();
-        let path: Path = lines
-            .first()
+        let lines_iter = &mut lines.iter();
+        let path: Path = lines_iter
+            .next()
             .map(|f| Path::from(*f))
             .context("failed to parse path")?;
 
-        for header_line in lines.iter().skip(1) {
+        for header_line in lines_iter.take_while(|l| !l.is_empty()) {
             if let Some((key, value)) = header_line.split_once(":") {
                 let value = value.trim_start();
                 headers.insert(key, value);
             }
         }
 
-        Ok(Self { path, headers })
+        let body = lines_iter.next().map(|l| l.as_bytes()).unwrap_or_default();
+
+        Ok(Self {
+            path,
+            headers,
+            body,
+        })
     }
 
     pub fn path(&self) -> &str {
@@ -177,14 +185,7 @@ fn main() -> anyhow::Result<()> {
                         let file_path =
                             PathBuf::from(dir.context("missing directory")?).join(&filename);
                         let mut file = std::fs::File::create(file_path)?;
-                        let mut buf = [0; 1024];
-                        loop {
-                            let n = stream.read(&mut buf)?;
-                            if n == 0 {
-                                break;
-                            }
-                            file.write_all(&buf[..n])?;
-                        }
+                        file.write_all(&request.body)?;
                         resp.created(stream)?;
                     }
                     m => {
