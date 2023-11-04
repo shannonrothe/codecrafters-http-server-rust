@@ -150,7 +150,7 @@ fn main() -> anyhow::Result<()> {
                     if file_path.exists() {
                         let mut file = std::fs::File::open(file_path)?;
                         let mut contents = Vec::new();
-                        file.read(&mut contents)?;
+                        file.read_to_end(&mut contents)?;
                         resp.file(stream, &contents)?;
                     } else {
                         resp.not_found(stream)?;
