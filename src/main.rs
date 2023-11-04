@@ -57,20 +57,30 @@ impl Response {
         Self
     }
 
-    pub fn success<S>(&self, mut stream: S, text: &str) -> anyhow::Result<()>
+    pub fn success<S>(&self, mut stream: S, text: Option<&str>) -> anyhow::Result<()>
     where
         S: Write,
     {
-        let header = vec![
-            "HTTP/1.1 200 OK",
-            "Content-Type: text/plain",
-            "Content-Length: ",
-        ]
-        .join("\r\n");
-        let resp = format!("{}{}\r\n\r\n{}", header, text.len(), text);
-        stream
-            .write_all(resp.as_bytes())
-            .context("failed to write content")?;
+        match text {
+            Some(text) => {
+                let header = vec![
+                    "HTTP/1.1 200 OK",
+                    "Content-Type: text/plain",
+                    "Content-Length: ",
+                ]
+                .join("\r\n");
+                let resp = format!("{}{}\r\n\r\n{}", header, text.len(), text);
+                stream
+                    .write_all(resp.as_bytes())
+                    .context("failed to write content")?;
+            }
+            None => {
+                stream
+                    .write_all(b"HTTP/1.1 200 OK\r\n\r\n")
+                    .context("failed to write content")?;
+            }
+        }
+
         Ok(())
     }
 
@@ -101,17 +111,14 @@ fn main() -> anyhow::Result<()> {
 
         match request.path() {
             "/" => {
-                stream
-                    .write_all(b"HTTP/1.1 200 OK\r\n\r\n")
-                    .context("failed to write 200")?;
-                continue;
+                resp.success(stream, None)?;
             }
             "/user-agent" => {
-                resp.success(stream, request.headers["User-Agent"])?;
+                resp.success(stream, Some(request.headers["User-Agent"]))?;
             }
-            p if p.starts_with("/echo") => {
-                let (str, _) = p.take_split(5);
-                resp.success(stream, str)?;
+            p if p.starts_with("/echo/") => {
+                let (str, _) = p.take_split(6);
+                resp.success(stream, Some(str))?;
             }
             _ => {
                 resp.not_found(stream)?;
