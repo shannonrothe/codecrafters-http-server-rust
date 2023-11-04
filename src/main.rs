@@ -3,39 +3,21 @@ use anyhow::Context;
 use nom::InputTake;
 use std::{
     collections::HashMap,
-    io::{BufRead, Read, Write},
+    io::{Read, Write},
     net::TcpListener,
 };
 
 #[derive(Debug)]
 struct Path<'a> {
-    method: &'a str,
     path: &'a str,
-}
-
-impl<'a> Path<'a> {
-    pub fn new() -> Self {
-        Self {
-            method: "",
-            path: "",
-        }
-    }
-
-    pub fn is_base(&self) -> bool {
-        self.path == "/"
-    }
-
-    pub fn is_echo(&self) -> bool {
-        self.path.starts_with("/echo")
-    }
 }
 
 impl<'a> From<&'a str> for Path<'a> {
     fn from(s: &'a str) -> Self {
         let mut parts = s.split_whitespace();
-        let method = parts.next().unwrap();
+        let _ = parts.next().unwrap();
         let path = parts.next().unwrap();
-        Self { method, path }
+        Self { path }
     }
 }
 
@@ -48,8 +30,6 @@ struct Request<'a> {
 impl<'a> Request<'a> {
     pub fn parse(lines: Vec<&'a str>) -> anyhow::Result<Self> {
         let mut headers = HashMap::new();
-        // let s = String::from_utf8_lossy(request);
-        // let s = s.split("\r\n").collect::<Vec<_>>();
         let path: Path = lines
             .first()
             .map(|f| Path::from(*f))
