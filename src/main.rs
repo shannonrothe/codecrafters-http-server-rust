@@ -19,23 +19,26 @@ fn main() -> anyhow::Result<()> {
         let mut parts = first_line.split_whitespace();
         match parts.nth(1) {
             Some(path) => {
-                if path != "/" && !path.starts_with("/echo") {
-                    stream
-                        .write_all(b"HTTP/1.1 404 Not Found\r\n\r\n")
-                        .context("failed to write 404")?;
-                } else {
-                    let parts = path.split("/").collect::<Vec<_>>();
-                    let random_str = parts.last().context("invalid path")?;
-                    let header = vec![
-                        "HTTP/1.1 200 OK",
-                        "Content-Type: text/plain",
-                        "Content-Length: ",
-                    ]
-                    .join("\r\n");
-                    let resp = format!("{}{}\r\n\r\n{}", header, random_str.len(), random_str);
-                    stream
-                        .write_all(resp.as_bytes())
-                        .context("failed to write content")?;
+                let (_, rest) = path.split_at(1);
+                let (maybe_echo, rest) = rest.split_once("/").context("invalid path")?;
+                match maybe_echo {
+                    "echo" => {
+                        let header = vec![
+                            "HTTP/1.1 200 OK",
+                            "Content-Type: text/plain",
+                            "Content-Length: ",
+                        ]
+                        .join("\r\n");
+                        let resp = format!("{}{}\r\n\r\n{}", header, rest.len(), rest);
+                        stream
+                            .write_all(resp.as_bytes())
+                            .context("failed to write content")?;
+                    }
+                    _ => {
+                        stream
+                            .write_all(b"HTTP/1.1 404 Not Found\r\n\r\n")
+                            .context("failed to write 404")?;
+                    }
                 }
             }
             _ => {
