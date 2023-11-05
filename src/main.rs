@@ -28,49 +28,48 @@ fn main() -> anyhow::Result<()> {
         let mut stream = stream?;
 
         thread::scope(|s| {
-            s.spawn(move || {
+            s.spawn(move || -> anyhow::Result<()> {
                 let args = Args::parse();
                 let dir = args.directory;
 
                 let mut buf = [0; 1024];
                 stream.read(&mut buf).unwrap();
                 let input = std::str::from_utf8(&buf).unwrap();
+
                 let (_, request) = Request::parse(input).unwrap();
                 let resp = Response::new();
                 match request.path() {
                     "/" => {
-                        resp.success(stream).unwrap();
+                        resp.success(stream)?;
                     }
                     "/user-agent" => {
                         if let Some(user_agent) = request.headers.0.get("User-Agent") {
-                            resp.text(stream, user_agent).unwrap();
+                            resp.text(stream, user_agent)?;
                         }
                     }
                     p if p.starts_with("/files/") && dir.is_some() => match request.method() {
                         "GET" => {
                             let (filename, _) = p.take_split(7);
                             let file_path =
-                                PathBuf::from(dir.context("missing directory").unwrap())
-                                    .join(&filename);
+                                PathBuf::from(dir.context("missing directory")?).join(&filename);
                             if file_path.exists() {
-                                let mut file = std::fs::File::open(file_path).unwrap();
+                                let mut file = std::fs::File::open(file_path)?;
                                 let mut contents = Vec::new();
-                                file.read_to_end(&mut contents).unwrap();
-                                resp.file(stream, &contents).unwrap();
+                                file.read_to_end(&mut contents)?;
+                                resp.file(stream, &contents)?;
                             } else {
-                                resp.not_found(stream).unwrap();
+                                resp.not_found(stream)?;
                             }
                         }
                         "POST" => {
                             let (filename, _) = p.take_split(7);
                             let file_path =
-                                PathBuf::from(dir.context("missing directory").unwrap())
-                                    .join(&filename);
-                            let mut file = std::fs::File::create(file_path).unwrap();
+                                PathBuf::from(dir.context("missing directory")?).join(&filename);
+                            let mut file = std::fs::File::create(file_path)?;
                             if let Some(body) = request.body {
-                                file.write_all(&body.0).unwrap();
+                                file.write_all(&body.0)?;
                             }
-                            resp.created(stream).unwrap();
+                            resp.created(stream)?;
                         }
                         m => {
                             unimplemented!("unsupported method: {m}");
@@ -78,25 +77,16 @@ fn main() -> anyhow::Result<()> {
                     },
                     p if p.starts_with("/echo/") => {
                         let (str, _) = p.take_split(6);
-                        resp.text(stream, str).unwrap();
+                        resp.text(stream, str)?;
                     }
                     _ => {
-                        resp.not_found(stream).unwrap();
+                        resp.not_found(stream)?;
                     }
                 }
+
+                Ok(())
             });
         });
-
-        // thread::spawn(move || -> anyhow::Result<()> {
-        //     let mut buf = [0; 1024];
-        //     stream.read(&mut buf)?;
-        //     let input = std::str::from_utf8(&buf)?;
-
-        //     let (_, request) = Request::parse(input)?;
-        //     let resp = Response::new();
-
-        //     Ok(())
-        // });
     }
 
     Ok(())

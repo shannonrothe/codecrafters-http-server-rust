@@ -64,8 +64,7 @@ pub struct Body(pub Vec<u8>);
 
 impl Body {
     pub fn parse(input: &str) -> IResult<&str, Option<Self>> {
-        let (input, data) = take_while(|c| c != '\0')(input)?;
-        let (input, _) = tag("\r\n\r\n")(input)?;
+        let (input, data) = take_until("\0")(input)?;
         if data.is_empty() {
             Ok((input, None))
         } else {
