@@ -32,7 +32,7 @@ fn main() -> anyhow::Result<()> {
                 let args = Args::parse();
                 let dir = args.directory;
 
-                let mut buf = [0; 1024];
+                let mut buf = [0; 2048];
                 stream.read(&mut buf).unwrap();
                 let input = std::str::from_utf8(&buf).unwrap();
 
