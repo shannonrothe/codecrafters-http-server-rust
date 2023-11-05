@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use nom::{
-    bytes::complete::{tag, take_until, take_while, take_while1},
+    bytes::complete::{tag, take_until, take_while1},
     multi::fold_many0,
     IResult,
 };
