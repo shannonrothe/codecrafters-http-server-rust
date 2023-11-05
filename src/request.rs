@@ -50,7 +50,6 @@ impl<'a> Headers<'a> {
     }
 
     fn parse_header(input: &'a str) -> IResult<&str, (&str, &str)> {
-        println!("input => {input}");
         let (input, key) = take_until(": ")(input)?;
         let (input, _) = tag(": ")(input)?;
         let (input, value) = take_until("\r\n")(input)?;
